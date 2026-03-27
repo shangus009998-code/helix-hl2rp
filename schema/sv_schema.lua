@@ -47,7 +47,8 @@ function Schema:SaveVendingMachines()
 				pos = v:GetPos(),
 				angles = v:GetAngles(),
 				class = v:GetClass(),
-				stock = v:GetAllStock()
+				stock = v:GetAllStock(),
+				skin = v:GetSkin()
 			}
 		end
 	end
@@ -104,6 +105,75 @@ function Schema:SaveMachines()
 	ix.data.Set("machines", data)
 end
 
+local lastCacheUpdate = 0
+function Schema:UpdateBusinessAreaCache()
+	if (lastCacheUpdate > CurTime()) then
+		return
+	end
+	lastCacheUpdate = CurTime() + 1 -- Debounce 1s
+
+	local cache = {}
+	for _, v in ipairs(ents.FindByClass("ix_businessarea")) do
+		local areaID = v:GetNetVar("AreaID", "")
+
+		if (areaID != "") then
+			cache[areaID] = cache[areaID] or {factions = {}, classes = {}}
+			
+			local factions = util.JSONToTable(v:GetFactions() or "[]")
+			local classes = util.JSONToTable(v:GetClasses() or "[]")
+
+			for _, faction in ipairs(factions) do
+				cache[areaID].factions[tostring(faction)] = true
+				cache[areaID].factions[tonumber(faction)] = true
+			end
+
+			for _, class in ipairs(classes) do
+				cache[areaID].classes[tostring(class)] = true
+				cache[areaID].classes[tonumber(class)] = true
+			end
+		end
+	end
+
+	SetNetVar("ixBusinessAccess", cache)
+end
+
+function Schema:LoadBusinessAreas()
+	for _, v in ipairs(ix.data.Get("businessAreas") or {}) do
+		local entity = ents.Create("ix_businessarea")
+
+		if (IsValid(entity)) then
+			entity:SetPos(v.pos)
+			entity:SetAngles(v.angles)
+			entity:Spawn()
+			entity:SetFactions(v.factions or "[]")
+			entity:SetClasses(v.classes or "[]")
+			entity:SetDisplayName(v.displayName or "Combine Dispenser")
+			entity:Activate()
+		end
+	end
+
+	-- Small delay to ensure areas are initialized
+	timer.Simple(1, function()
+		Schema:UpdateBusinessAreaCache()
+	end)
+end
+
+function Schema:SaveBusinessAreas()
+	local data = {}
+
+	for _, v in ipairs(ents.FindByClass("ix_businessarea")) do
+		data[#data + 1] = {
+			pos = v:GetPos(),
+			angles = v:GetAngles(),
+			factions = v:GetFactions(),
+			classes = v:GetClasses(),
+			displayName = v:GetDisplayName()
+		}
+	end
+
+	ix.data.Set("businessAreas", data)
+end
+
 -- data loading
 function Schema:LoadRationDispensers()
 	for _, v in ipairs(ix.data.Get("rationDispensers") or {}) do
@@ -128,6 +198,7 @@ function Schema:LoadVendingMachines()
 				entity:SetAngles(v.angles)
 				entity:Spawn()
 				entity:SetStock(v.stock)
+				entity:SetSkin(v.skin or 0)
 				entity:Activate()
 			end
 		end

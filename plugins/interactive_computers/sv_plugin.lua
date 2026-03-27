@@ -2,6 +2,7 @@ local PLUGIN = PLUGIN
 
 PLUGIN.storedComputers = PLUGIN.storedComputers or {}
 PLUGIN.nextComputerID = PLUGIN.nextComputerID or 1
+PLUGIN.entities = PLUGIN.entities or {}
 
 local MAX_USE_DISTANCE_SQR = 160 * 160
 local SECURITY_BYPASS_DURATION = 300
@@ -102,39 +103,153 @@ local function IsComputerAccessible(client, entity)
 	return true
 end
 
-function PLUGIN:BuildCombinePayload(client)
+local function GetExcludedFactions()
+	local excluded = {}
+	for _, v in pairs(ix.faction.indices) do
+		if (v.isCombine or v.name == "Administrator" or v.name == "Metropolice Force" or v.name == "Overwatch Transhuman Arm") then
+			excluded[v.index] = true
+			excluded[v.uniqueID] = true
+			excluded[v.name] = true
+		end
+	end
+	return excluded
+end
+
+PLUGIN.lastRosterUpdate = 0
+PLUGIN.rosterCache = {}
+
+function PLUGIN:BuildCombinePayload(client, callback)
+	local scannerPlugin = ix.plugin.Get("scanner")
+	local photoHistory = {}
+	if (scannerPlugin and scannerPlugin.photoHistory) then
+		for _, v in ipairs(scannerPlugin.photoHistory) do
+			photoHistory[#photoHistory + 1] = {
+				isSurveillance = v.isSurveillance,
+				time = v.time,
+				pos = v.pos,
+				ang = v.ang,
+				id = v.id,
+				trg = v.trg,
+				zone = v.zone
+			}
+		end
+	end
+
 	local payload = {
 		combineTerminal = true,
 		civicData = self:GetCivicPanelData(),
 		canAccessCombine = true,
 		canEditObjectives = hook.Run("CanPlayerEditObjectives", client) == true,
-		canEditData = client:IsCombine(),
+		canEditData = client:IsCombine() or client:IsAdmin(),
 		objectives = Schema and Schema.CombineObjectives or {},
 		journalData = self:GetCombineJournalData(client),
-		roster = {}
+		roster = {},
+		photoLogs = photoHistory,
+		cameras = {}
 	}
 
-	for _, target in ipairs(player.GetAll()) do
-		local character = target:GetCharacter()
-
-		if (!IsValid(target) or !character or target:IsCombine() or target:Team() == FACTION_ADMIN) then
-			continue
-		end
-
-		payload.roster[#payload.roster + 1] = {
-			target = target,
-			name = character:GetName(),
-			cid = character:GetData("cid", "00000"),
-			data = character:GetData("combineData") or {}
+	for _, v in ipairs(ents.FindByClass("npc_combine_camera")) do
+		payload.cameras[#payload.cameras + 1] = {
+			ent = v,
+			id = v:EntIndex(),
+			name = "C-i" .. v:EntIndex()
 		}
 	end
 
-	table.sort(payload.roster, function(a, b)
-		return (a.name or "") < (b.name or "")
-	end)
+	for _, v in ipairs(ents.FindByClass("ix_scanner")) do
+		local pilot = v:GetPilot()
+		if (IsValid(pilot)) then
+			payload.cameras[#payload.cameras + 1] = {
+				ent = v,
+				id = v:EntIndex(),
+				name = v:GetNetVar("ixScannerName", "SCN-" .. v:EntIndex())
+			}
+		end
+	end
 
-	return payload
+	-- Return cached roster if it's fresh enough (60 seconds)
+	if (self.lastRosterUpdate > CurTime()) then
+		payload.roster = self.rosterCache
+
+		if (callback) then
+			callback(payload)
+		end
+		return
+	end
+
+	local excluded = GetExcludedFactions()
+
+	-- Database query to include offline characters
+	local query = mysql:Select("ix_characters")
+	query:Select("id")
+	query:Select("name")
+	query:Select("data")
+	query:Select("faction")
+	query:Where("schema", Schema.folder)
+	
+	query:Callback(function(result)
+		if (!callback) then return end
+		
+		if (istable(result)) then
+			local onlineCharacters = {}
+			for _, v in ipairs(player.GetAll()) do
+				local char = v:GetCharacter()
+				if (char) then
+					onlineCharacters[char:GetID()] = v
+				end
+			end
+
+			local roster = {}
+
+			for _, row in ipairs(result) do
+				local faction = row.faction
+				if (excluded[faction]) then
+					continue
+				end
+
+				local charData = util.JSONToTable(row.data or "{}")
+				-- Skip banned characters (Helix offline bans plugin standard)
+				if (charData.banned) then
+					continue
+				end
+
+				local charID = tonumber(row.id)
+				local onlinePlayer = onlineCharacters[charID]
+				local combineData = (IsValid(onlinePlayer) and onlinePlayer:GetCharacter():GetData("combineData")) or (charData.combineData or {})
+
+				roster[#roster + 1] = {
+					target = onlinePlayer,
+					id = charID,
+					name = row.name,
+					cid = charData.cid or "00000",
+					data = combineData,
+					isOnline = IsValid(onlinePlayer),
+					hasContent = (combineData.text and string.Trim(combineData.text or "") != "") == true
+				}
+			end
+
+			table.sort(roster, function(a, b)
+				if (a.isOnline != b.isOnline) then
+					return a.isOnline
+				end
+
+				if (a.hasContent != b.hasContent) then
+					return a.hasContent
+				end
+
+				return (a.name or "") < (b.name or "")
+			end)
+
+			self.rosterCache = roster
+			self.lastRosterUpdate = CurTime() + 60
+			payload.roster = roster
+		end
+
+		callback(payload)
+	end)
+	query:Execute()
 end
+
 
 function PLUGIN:GetCivicPanelData()
 	return NormalizeCivicPanelData(self, ix.data.Get("interactiveComputerCivicPanel", {}, false, true))
@@ -170,8 +285,8 @@ function PLUGIN:UpdateComputerVisualState(entity, state)
 
 	self:SetEntitySkinForState(entity, definition and definition.skins, state)
 	
-	for _, candidate in ipairs(ents.GetAll()) do
-		if (!self:IsSupportComputer(candidate)) then
+	for _, candidate in pairs(self.entities) do
+		if (!IsValid(candidate) or !self:IsSupportComputer(candidate)) then
 			continue
 		end
 
@@ -186,8 +301,8 @@ function PLUGIN:UpdateComputerVisualState(entity, state)
 end
 
 function PLUGIN:RefreshInteractiveComputerVisualStates()
-	for _, entity in ipairs(ents.GetAll()) do
-		if (!self:IsInteractiveComputer(entity)) then
+	for _, entity in pairs(self.entities) do
+		if (!IsValid(entity) or !self:IsInteractiveComputer(entity)) then
 			continue
 		end
 
@@ -316,16 +431,17 @@ function PLUGIN:ApplyEntryAuthors(previousData, newData, client, automatic)
 	return newData
 end
 
-function PLUGIN:BuildOpenContext(client, entity)
-	local context = {
-		combineTerminal = entity:IsCombineTerminal()
-	}
-
-	if (context.combineTerminal) then
-		context = self:BuildCombinePayload(client)
+function PLUGIN:BuildOpenContext(client, entity, callback)
+	if (entity:IsCombineTerminal()) then
+		self:BuildCombinePayload(client, callback)
+		return
 	end
 
-	return context
+	if (callback) then
+		callback({
+			combineTerminal = false
+		})
+	end
 end
 
 function PLUGIN:GetSessionStorageEntity(entity)
@@ -506,7 +622,7 @@ function PLUGIN:GenerateComputerID()
 	return computerID
 end
 
-function PLUGIN:CreateComputer(position, angles, model, data, powered, forcedID)
+function PLUGIN:CreateComputer(position, angles, model, data, powered, forcedID, bDropToFloor)
 	local definition = self:GetComputerDefinition(model or "")
 	local className = definition and definition.class or "ix_interactive_computer"
 	model = string.lower((definition and definition.model) or model or self.defaultModel)
@@ -521,11 +637,15 @@ function PLUGIN:CreateComputer(position, angles, model, data, powered, forcedID)
 	end
 
 	entity.ixModelOverride = model
+	entity:SetComputerModel(model) -- Ensure the model is applied after setting ixModelOverride
 	entity:SetPos(position)
 	entity:SetAngles(angles)
 	entity:Spawn()
 	entity:Activate()
-	entity:DropToFloor()
+
+	if (bDropToFloor) then
+		entity:DropToFloor()
+	end
 
 	local computerID = tonumber(forcedID) or self:GenerateComputerID()
 
@@ -581,6 +701,7 @@ function PLUGIN:OpenComputer(client, entity)
 	storageEntity.ixActiveUser = client
 	entity.ixActiveUser = client
 	entity.ixSessionStorageEntity = storageEntity
+	client:SetNetVar("ixUsingTerminal", entity)
 
 	if (self:IsCivicComputer(entity)) then
 		netstream.Start(client, "ixInteractiveComputerOpen", entity, entity:GetComputerData(), entity:GetPowered(), self:BuildCivicPayload(client))
@@ -593,7 +714,11 @@ function PLUGIN:OpenComputer(client, entity)
 		return
 	end
 
-	netstream.Start(client, "ixInteractiveComputerOpen", entity, entity:GetComputerData(), entity:GetPowered(), self:BuildOpenContext(client, entity))
+	self:BuildOpenContext(client, entity, function(payload)
+		if (IsValid(client) and IsValid(entity)) then
+			netstream.Start(client, "ixInteractiveComputerOpen", entity, entity:GetComputerData(), entity:GetPowered(), payload)
+		end
+	end)
 end
 
 function PLUGIN:ReleaseComputerUser(entity, client)
@@ -612,11 +737,19 @@ function PLUGIN:ReleaseComputerUser(entity, client)
 	end
 
 	if (IsValid(primaryEntity)) then
+		if (IsValid(primaryEntity.ixActiveUser)) then
+			primaryEntity.ixActiveUser:SetNetVar("ixUsingTerminal", nil)
+		end
+
 		primaryEntity.ixActiveUser = nil
 		primaryEntity.ixSessionStorageEntity = nil
 	end
 
 	if (IsValid(storageEntity)) then
+		if (IsValid(storageEntity.ixActiveUser)) then
+			storageEntity.ixActiveUser:SetNetVar("ixUsingTerminal", nil)
+		end
+
 		storageEntity.ixActiveUser = nil
 		self:ClearAccessSession(storageEntity, client)
 	end
@@ -625,8 +758,8 @@ end
 function PLUGIN:SaveData()
 	local data = {}
 
-	for _, entity in ipairs(ents.GetAll()) do
-		if (!PLUGIN:IsPrimaryComputerEntity(entity)) then
+	for _, entity in pairs(self.entities) do
+		if (!IsValid(entity) or !PLUGIN:IsPrimaryComputerEntity(entity)) then
 			continue
 		end
 
@@ -670,7 +803,7 @@ function PLUGIN:LoadData()
 			self:NormalizeData(computerData.data),
 			computerData.powered,
 			computerData.computerID,
-			computerData.movable
+			false -- Do NOT drop to floor when loading, to keep z-pos (especially on containers)
 		)
 
 		if (IsValid(entity)) then
@@ -690,17 +823,33 @@ end
 
 function PLUGIN:EntityRemoved(entity)
 	if (!ix.shuttingDown and PLUGIN:IsPrimaryComputerEntity(entity)) then
+		self.entities[entity:EntIndex()] = nil
 		self:SaveData()
 	elseif (!ix.shuttingDown and PLUGIN:IsSupportComputer(entity)) then
+		self.entities[entity:EntIndex()] = nil
 		self:SaveData()
 	end
 end
 
 function PLUGIN:PlayerDisconnected(client)
-	for _, entity in ipairs(ents.GetAll()) do
-		if (self:IsPrimaryComputerEntity(entity) and entity.ixActiveUser == client) then
+	for _, entity in pairs(self.entities) do
+		if (IsValid(entity) and self:IsPrimaryComputerEntity(entity) and entity.ixActiveUser == client) then
 			entity.ixActiveUser = nil
 			self:ClearAccessSession(entity, client)
+		end
+	end
+end
+
+function PLUGIN:OnEntityCreated(entity)
+	if (self:IsComputerEntity(entity)) then
+		self.entities[entity:EntIndex()] = entity
+	end
+end
+
+function PLUGIN:InitPostEntity()
+	for _, entity in ipairs(ents.GetAll()) do
+		if (self:IsComputerEntity(entity)) then
+			self.entities[entity:EntIndex()] = entity
 		end
 	end
 end
@@ -753,13 +902,26 @@ netstream.Hook("ixInteractiveComputerPower", function(client, entity, state, scr
 	PLUGIN:SaveData()
 
 	if (screenMode == "combineJournal") then
-		netstream.Start(client, "ixInteractiveComputerSyncCombineJournal", entity, PLUGIN:GetCombineJournalData(client), PLUGIN:BuildOpenContext(client, entity))
+		PLUGIN:BuildOpenContext(client, entity, function(payload)
+			if (IsValid(client) and IsValid(entity)) then
+				netstream.Start(client, "ixInteractiveComputerSyncCombineJournal", entity, PLUGIN:GetCombineJournalData(client), payload)
+			end
+		end)
 		return
 	end
 
 	if (screenMode == "civic") then
-		local returnContext = !PLUGIN:IsCivicComputer(entity) and entity:IsCombineTerminal() and PLUGIN:BuildOpenContext(client, entity) or nil
-		netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), PLUGIN:BuildCivicPayload(client, returnContext))
+		local isRequestingCombine = !PLUGIN:IsCivicComputer(entity) and entity:IsCombineTerminal()
+		
+		if (isRequestingCombine) then
+			PLUGIN:BuildOpenContext(client, entity, function(payload)
+				if (IsValid(client) and IsValid(entity)) then
+					netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), PLUGIN:BuildCivicPayload(client, payload))
+				end
+			end)
+		else
+			netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), PLUGIN:BuildCivicPayload(client))
+		end
 		return
 	end
 
@@ -774,7 +936,11 @@ netstream.Hook("ixInteractiveComputerPower", function(client, entity, state, scr
 		return
 	end
 
-	netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), PLUGIN:BuildOpenContext(client, entity))
+	PLUGIN:BuildOpenContext(client, entity, function(payload)
+		if (IsValid(client) and IsValid(entity)) then
+			netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), payload)
+		end
+	end)
 end)
 
 netstream.Hook("ixInteractiveComputerUnlock", function(client, entity, password)
@@ -957,7 +1123,12 @@ netstream.Hook("ixInteractiveComputerUpdateObjectives", function(client, entity,
 	Schema.CombineObjectives = data
 	Schema:AddCombineDisplayMessage("@cViewObjectivesFiller", nil, client, date:spanseconds())
 
-	netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), PLUGIN:BuildOpenContext(client, entity))
+	PLUGIN.lastRosterUpdate = 0
+	PLUGIN:BuildOpenContext(client, entity, function(payload)
+		if (IsValid(client) and IsValid(entity)) then
+			netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), payload)
+		end
+	end)
 end)
 
 netstream.Hook("ixInteractiveComputerSaveCivicPanel", function(client, entity, payload, legacyPropaganda)
@@ -1122,22 +1293,75 @@ netstream.Hook("ixInteractiveComputerUpdateData", function(client, entity, targe
 		return
 	end
 
-	if (!IsValid(target) or !target:IsPlayer() or !target:GetCharacter()) then
+	local charID = tonumber(target) or (IsValid(target) and target:GetCharacter() and target:GetCharacter():GetID())
+	if (!charID) then
 		return
 	end
 
-	if (!hook.Run("CanPlayerEditData", client, target)) then
+	local targetChar = ix.char.loaded[charID]
+	local targetPlayer = targetChar and targetChar:GetPlayer()
+
+	if (IsValid(targetPlayer)) then
+		if (!hook.Run("CanPlayerEditData", client, targetPlayer)) then
+			client:NotifyLocalized("noPerm")
+			return
+		end
+	elseif (!client:IsCombine() and !client:IsAdmin()) then
 		client:NotifyLocalized("noPerm")
 		return
 	end
 
-	target:GetCharacter():SetData("combineData", {
+	local data = {
 		text = string.Trim(string.sub(tostring(text or ""), 1, 1000)),
 		editor = client:GetCharacter() and client:GetCharacter():GetName() or client:Name()
-	})
-	Schema:AddCombineDisplayMessage("@cViewDataFiller", nil, client)
+	}
 
-	netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), PLUGIN:BuildOpenContext(client, entity))
+	local function Sync()
+		if (IsValid(client) and IsValid(entity)) then
+			PLUGIN.lastRosterUpdate = 0
+			PLUGIN:BuildOpenContext(client, entity, function(payload)
+				if (IsValid(client) and IsValid(entity)) then
+					netstream.Start(client, "ixInteractiveComputerSync", entity, entity:GetComputerData(), entity:GetPowered(), payload)
+				end
+			end)
+		end
+	end
+
+	local charID = tonumber(target) or (IsValid(target) and target:GetCharacter() and target:GetCharacter():GetID())
+	if (!charID) then
+		return
+	end
+
+	local loadedCharacter = ix.char.loaded[charID]
+	if (loadedCharacter) then
+		loadedCharacter:SetData("combineData", data)
+		Schema:AddCombineDisplayMessage("@cViewDataFiller", nil, client)
+		Sync()
+	else
+		-- Async update for offline character
+		local selectQuery = mysql:Select("ix_characters")
+		selectQuery:Select("data")
+		selectQuery:Where("id", charID)
+		selectQuery:Callback(function(result)
+			if (istable(result) and #result > 0) then
+				local charData = util.JSONToTable(result[1].data or "{}") -- Use {} for empty data
+				charData.combineData = data
+				
+				local updateQuery = mysql:Update("ix_characters")
+				updateQuery:Update("data", util.TableToJSON(charData))
+				updateQuery:Where("id", charID)
+				updateQuery:Callback(function()
+					Schema:AddCombineDisplayMessage("@cViewDataFiller", nil, client)
+					Sync()
+				end)
+				updateQuery:Execute()
+			else
+				-- Character not found or no data, still sync to update client state
+				Sync()
+			end
+		end)
+		selectQuery:Execute()
+	end
 end)
 
 netstream.Hook("ixInteractiveComputerSaveCombineJournal", function(client, entity, data)
@@ -1160,29 +1384,20 @@ netstream.Hook("ixInteractiveComputerSaveCombineJournal", function(client, entit
 	netstream.Start(client, "ixInteractiveComputerSyncCombineJournal", entity, normalized, PLUGIN:BuildOpenContext(client, entity))
 end)
 
-function PLUGIN:TryBypassSecurity(client, entity)
+
+netstream.Hook("ixInteractiveComputerRequestPhoto", function(client, entity, timestamp)
 	local canUse, failMessage = IsComputerAccessible(client, entity)
-	if (!canUse) then
-		client:NotifyLocalized(failMessage)
-		return false
+	if (!canUse) then return end
+
+	local scannerPlugin = ix.plugin.Get("scanner")
+	if (!scannerPlugin or !scannerPlugin.photoHistory) then return end
+
+	-- Find by timestamp (rounding to nearest second for network tolerance)
+	local searchTime = math.floor(timestamp)
+	for _, v in ipairs(scannerPlugin.photoHistory) do
+		if (math.floor(v.time) == searchTime) then
+			netstream.Start(client, "ixInteractiveComputerSendPhoto", v)
+			break
+		end
 	end
-
-	entity = self:ResolveComputerEntity(entity)
-
-	if (!entity:IsCombineTerminal()) then
-		client:NotifyLocalized("interactiveComputerInvalidEmpTarget")
-		return false
-	end
-
-	if (entity:IsSecurityBypassed()) then
-		client:NotifyLocalized("interactiveComputerSecurityAlreadyBypassed")
-		return false
-	end
-
-	entity:SetSecurityBypass(SECURITY_BYPASS_DURATION)
-	entity:EmitSound("ambient/machines/combine_terminal_idle2.wav", 65, 110, 0.7)
-	entity:EmitSound("buttons/combine_button1.wav", 60, 100, 0.7)
-	client:NotifyLocalized("interactiveComputerSecurityBypassed")
-
-	return true
-end
+end)

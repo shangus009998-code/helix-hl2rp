@@ -25,7 +25,7 @@ surface.CreateFont("ixComputerDOSTiny", {
 })
 
 surface.CreateFont("ixComputerShellTitle", {
-	font = "Verdana",
+	font = "NanumGothic" or "Verdana",
 	size = 18,
 	weight = 800,
 	extended = true,
@@ -33,7 +33,7 @@ surface.CreateFont("ixComputerShellTitle", {
 })
 
 surface.CreateFont("ixComputerShellBody", {
-	font = "Verdana",
+	font = "NanumGothic" or "Verdana",
 	size = 15,
 	weight = 600,
 	extended = true,
@@ -41,7 +41,7 @@ surface.CreateFont("ixComputerShellBody", {
 })
 
 surface.CreateFont("ixComputerCombineHeader", {
-	font = "Trebuchet MS",
+	font = "NanumGothic" or "Trebuchet MS",
 	size = 28,
 	weight = 900,
 	extended = true,
@@ -57,7 +57,7 @@ surface.CreateFont("ixComputerCombineGrid", {
 })
 
 surface.CreateFont("ixComputerCombineBody", {
-	font = "Trebuchet MS",
+	font = "NanumGothic" or "Trebuchet MS",
 	size = 16,
 	weight = 700,
 	extended = true,
@@ -271,6 +271,10 @@ local function HasInteractiveKeyboard(frame)
 
 	local definition = PLUGIN:GetComputerDefinition(frame.entity:GetClass())
 	if (!definition or definition.family != "general") then
+		return true
+	end
+
+	if (definition.standalone == true) then
 		return true
 	end
 
@@ -1509,6 +1513,10 @@ local function StyleTextEntry(entry)
 end
 
 local function StyleCombineButton(button)
+	if (!IsValid(button)) then
+		return
+	end
+
 	button.Paint = function(_, width, height)
 		local hovered = button:IsHovered()
 		local active = button.ixActive == true
@@ -1565,12 +1573,12 @@ local function StyleCombineListView(list)
 	if (IsValid(header)) then
 		header:SetTall(22)
 		header.Paint = function(_, width, height)
-			surface.SetDrawColor(8, 18, 12, 240)
+			surface.SetDrawColor(8, 16, 28, 240)
 			surface.DrawRect(0, 0, width, height)
 		end
 
 		for _, column in ipairs(header.Columns or {}) do
-			column:SetTextColor(COLOR_DOS_TEXT)
+			column:SetTextColor(COMBINE_TEXT)
 			column:SetFont("ixComputerDOSTiny")
 		end
 	end
@@ -1579,19 +1587,19 @@ local function StyleCombineListView(list)
 	if (IsValid(vBar)) then
 		vBar:SetWide(8)
 		vBar.Paint = function(_, width, height)
-			surface.SetDrawColor(Color(6, 12, 6, 220))
+			surface.SetDrawColor(Color(8, 16, 28, 220))
 			surface.DrawRect(0, 0, width, height)
 		end
 		vBar.btnUp:SetText("")
 		vBar.btnDown:SetText("")
 		vBar.btnGrip:SetText("")
 		vBar.btnUp.Paint = function(_, width, height)
-			surface.SetDrawColor(12, 36, 16, 220)
+			surface.SetDrawColor(14, 24, 38, 220)
 			surface.DrawRect(0, 0, width, height)
 		end
 		vBar.btnDown.Paint = vBar.btnUp.Paint
 		vBar.btnGrip.Paint = function(_, width, height)
-			surface.SetDrawColor(COLOR_DOS_TEXT.r, COLOR_DOS_TEXT.g, COLOR_DOS_TEXT.b, 110)
+			surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 110)
 			surface.DrawRect(0, 0, width, height)
 		end
 	end
@@ -1676,7 +1684,7 @@ function JOURNAL:PaintOver(width, height)
 		local barY = math.floor(height * 0.58)
 		local barWidth = width - 220
 
-		DrawCombineLogo(width * 0.5, height * 0.34, 78, 180)
+		DrawCombineLogo(width * 0.5, height * 0.34, 78, 220)
 		draw.SimpleText("PERSONAL LOG DOS", "ixComputerCombineHeader", width * 0.5, height * 0.44, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 		draw.SimpleText(L(IsBootSequenceActive(self) and "interactiveComputerBooting" or "interactiveComputerPowerOff"), "ixComputerDOSBody", width * 0.5, height * 0.51, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 		DrawInsetBox(110, barY, barWidth, 18, Color(10, 24, 40), Color(38, 98, 146), Color(8, 18, 32, 255))
@@ -1751,14 +1759,16 @@ end
 
 local function ApplyCombineStyling(frame)
 	StyleCombineListView(frame.rosterList)
+	StyleCombineListView(frame.photoList)
+	StyleCombineListView(frame.cameraList)
 	StyleCombineButton(frame.objectivesTabButton)
 	StyleCombineButton(frame.civilDataTabButton)
 	StyleCombineButton(frame.objectiveSaveButton)
 	StyleCombineButton(frame.dataSaveButton)
 	StyleCombineButton(frame.personalLogButton)
 	StyleCombineButton(frame.publicPanelButton)
-	StyleCombineButton(frame.rosterScrollUpButton)
-	StyleCombineButton(frame.rosterScrollDownButton)
+	StyleCombineButton(frame.photoLogsTabButton)
+	StyleCombineButton(frame.liveFeedTabButton)
 	frame.closeButton.Paint = function(_, width, height)
 		surface.SetDrawColor(0, 0, 0, 0)
 		surface.DrawRect(0, 0, width, height)
@@ -1776,8 +1786,8 @@ local function ApplyCombineStyling(frame)
 	BindButtonClickSound(frame.dataSaveButton, frame)
 	BindButtonClickSound(frame.personalLogButton, frame)
 	BindButtonClickSound(frame.publicPanelButton, frame)
-	BindButtonClickSound(frame.rosterScrollUpButton, frame)
-	BindButtonClickSound(frame.rosterScrollDownButton, frame)
+	BindButtonClickSound(frame.photoLogsTabButton, frame)
+	BindButtonClickSound(frame.liveFeedTabButton, frame)
 	BindEnterSound(frame.objectivesEntry, frame)
 	BindEnterSound(frame.dataEntry, frame)
 end
@@ -1845,26 +1855,60 @@ function COMBINE:Init()
 		self:SetActiveTab("civil")
 	end
 
+	self.rosterSearch = self:Add("DTextEntry")
+	self.rosterSearch:SetPlaceholderText(L("interactiveComputerSearch"))
+	self.rosterSearch:SetFont("ixComputerDOSTiny")
+	self.rosterSearch:SetUpdateOnType(true)
+	self.rosterSearch.OnValueChange = function(entry)
+		self:PopulateRoster(entry:GetValue())
+	end
+
+	self.photoLogsTabButton = self:Add("DButton")
+	self.photoLogsTabButton:SetText(L("interactiveComputerPhotoLogs"))
+	self.photoLogsTabButton:SetFont("ixComputerDOSBody")
+	self.photoLogsTabButton:SetTextColor(COMBINE_TEXT)
+	self.photoLogsTabButton.DoClick = function()
+		self:SetActiveTab("photoLogs")
+	end
+
+	self.liveFeedTabButton = self:Add("DButton")
+	self.liveFeedTabButton:SetText(L("interactiveComputerLiveFeed"))
+	self.liveFeedTabButton:SetFont("ixComputerDOSBody")
+	self.liveFeedTabButton:SetTextColor(COMBINE_TEXT)
+	self.liveFeedTabButton.DoClick = function()
+		self:SetActiveTab("liveFeed")
+	end
+
 	self.rosterList = self:Add("DListView")
 	self.rosterList:SetHeaderHeight(0)
 	self.rosterList:SetDataHeight(24)
 	self.rosterList:AddColumn("UNIT")
 	self.rosterList.OnRowSelected = function(_, rowID, row)
 		self.selectedTarget = row.ixTarget
+		self.selectedCharID = row.ixCharID
 		self:PopulateSelectedData()
 	end
 
-	self.rosterScrollUpButton = self:Add("DButton")
-	self.rosterScrollUpButton:SetText("∧")
-	self.rosterScrollUpButton:SetFont("ixComputerDOSBody")
-	self.rosterScrollUpButton:SetTextColor(COMBINE_TEXT)
+	self.photoList = self:Add("DListView")
+	self.photoList:SetHeaderHeight(0)
+	self.photoList:SetDataHeight(24)
+	self.photoList:AddColumn("TIME")
+	self.photoList:AddColumn("TYPE")
+	self.photoList.OnRowSelected = function(_, rowID, row)
+		if (row.ixNoData) then return end
+		self:ViewPhoto(row.ixPhotoData)
+	end
 
-	self.rosterScrollDownButton = self:Add("DButton")
-	self.rosterScrollDownButton:SetText("∨")
-	self.rosterScrollDownButton:SetFont("ixComputerDOSBody")
-	self.rosterScrollDownButton:SetTextColor(COMBINE_TEXT)
-	BindScrollHoldButton(self.rosterScrollUpButton, function() return IsValid(self.rosterList) and self.rosterList.VBar or nil end, -72)
-	BindScrollHoldButton(self.rosterScrollDownButton, function() return IsValid(self.rosterList) and self.rosterList.VBar or nil end, 72)
+	self.photoViewer = self:Add("DHTML")
+
+	self.cameraList = self:Add("DListView")
+	self.cameraList:SetHeaderHeight(0)
+	self.cameraList:SetDataHeight(24)
+	self.cameraList:AddColumn("CAMERA ID")
+	self.cameraList.OnRowSelected = function(_, rowID, row)
+		if (row.ixNoData) then return end
+		self.selectedCamera = row.ixCamera
+	end
 
 	self.objectivesEntry = self:Add("DTextEntry")
 	self.objectivesEntry:SetMultiline(true)
@@ -1899,11 +1943,11 @@ function COMBINE:Init()
 	self.dataSaveButton:SetFont("ixComputerDOSBody")
 	self.dataSaveButton:SetTextColor(COMBINE_TEXT)
 	self.dataSaveButton.DoClick = function()
-		if (!IsValid(self.entity) or !self.context.canEditData or !IsValid(self.selectedTarget)) then
+		if (!IsValid(self.entity) or !self.context.canEditData or !self.selectedCharID) then
 			return
 		end
 
-		netstream.Start("ixInteractiveComputerUpdateData", self.entity, self.selectedTarget, string.sub(self.dataEntry:GetValue(), 1, 1000))
+		netstream.Start("ixInteractiveComputerUpdateData", self.entity, self.selectedCharID, string.sub(self.dataEntry:GetValue(), 1, 1000))
 	end
 
 	self.personalLogButton = self:Add("DButton")
@@ -1971,9 +2015,13 @@ function COMBINE:UpdateVisibleState()
 
 	self.objectivesTabButton.ixActive = self.activeTab == "objectives"
 	self.civilDataTabButton.ixActive = self.activeTab == "civil"
+	self.photoLogsTabButton.ixActive = self.activeTab == "photoLogs"
+	self.liveFeedTabButton.ixActive = self.activeTab == "liveFeed"
 
 	self.objectivesTabButton:SetEnabled(isReady)
 	self.civilDataTabButton:SetEnabled(isReady)
+	self.photoLogsTabButton:SetEnabled(isReady)
+	self.liveFeedTabButton:SetEnabled(isReady)
 	self.personalLogButton:SetEnabled(isReady)
 	self.publicPanelButton:SetEnabled(isReady)
 
@@ -1981,12 +2029,18 @@ function COMBINE:UpdateVisibleState()
 	self.objectiveSaveButton:SetVisible(showObjectives and self.context.canEditObjectives == true)
 	self.objectivesEntry:SetEnabled(showObjectives and self.context.canEditObjectives == true)
 
+	self.rosterSearch:SetVisible(showCivil)
 	self.rosterList:SetVisible(showCivil)
-	self.rosterScrollUpButton:SetVisible(showCivil)
-	self.rosterScrollDownButton:SetVisible(showCivil)
 	self.dataEntry:SetVisible(showCivil)
 	self.dataSaveButton:SetVisible(showCivil and self.context.canEditData == true)
-	self.dataEntry:SetEnabled(showCivil and self.context.canEditData == true and self.selectedTarget != nil)
+	self.dataEntry:SetEnabled(showCivil and self.context.canEditData == true and self.selectedCharID != nil)
+
+	local showPhotos = isReady and self.activeTab == "photoLogs"
+	self.photoList:SetVisible(showPhotos)
+	self.photoViewer:SetVisible(showPhotos)
+
+	local showLive = isReady and self.activeTab == "liveFeed"
+	self.cameraList:SetVisible(showLive)
 end
 
 function COMBINE:UpdateStatus()
@@ -2001,9 +2055,9 @@ function COMBINE:UpdateStatus()
 	end
 
 	if (self.activeTab == "civil") then
-		if (self.selectedTarget) then
+		if (self.selectedCharID) then
 			for _, entry in ipairs(self.context.roster or {}) do
-				if (entry.target == self.selectedTarget) then
+				if (entry.id == self.selectedCharID) then
 					self.statusLabel:SetText(string.format("UNIT: %s | CID: %s", entry.name or "UNKNOWN", entry.cid or "00000"))
 					return
 				end
@@ -2014,7 +2068,66 @@ function COMBINE:UpdateStatus()
 		return
 	end
 
+	if (self.activeTab == "photoLogs") then
+		self.statusLabel:SetText(L("interactiveComputerPhotoLogs"))
+		return
+	end
+
+	if (self.activeTab == "liveFeed") then
+		self.statusLabel:SetText(L("interactiveComputerLiveFeed"))
+		return
+	end
+
 	self.statusLabel:SetText(L("interactiveComputerSelectModule"))
+end
+
+function COMBINE:ViewPhoto(photo)
+	if (!photo) then
+		self.photoViewer:SetHTML("")
+		return
+	end
+
+	if (!photo.data) then
+		self.photoViewer:SetHTML([[
+			<style>body { margin: 0; padding: 0; background: #000; color: #73c8ff; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; }</style>
+			<body>LOADING DATA...</body>
+		]])
+		netstream.Start("ixInteractiveComputerRequestPhoto", self.entity, photo.time)
+		return
+	end
+
+	local b64 = util.Base64Encode(util.Decompress(photo.data))
+	local html = string.format([[
+		<style>
+			body { margin: 0; padding: 0; background: #000; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+			img { max-width: 100%%; max-height: 100%%; image-rendering: pixelated; border: 1px solid #73c8ff44; }
+		</style>
+		<body><img src="data:image/jpeg;base64,%s"></body>
+	]], b64)
+
+	self.photoViewer:SetHTML(html)
+	if (photo.isSurveillance) then
+		self.photoViewer.PaintOver = function(viewer, w, h)
+			if (!IsValid(viewer)) then return end
+			
+			local y = 8
+			if (photo.pos) then
+				draw.SimpleText(string.format("POS (%.0f, %.0f, %.0f)", photo.pos[1], photo.pos[2], photo.pos[3]), "ixScannerFont", 8, y, color_white)
+			end
+			y = y + 16
+			if (photo.ang) then
+				draw.SimpleText(string.format("ANG (%.0f, %.0f, %.0f)", photo.ang[1], photo.ang[2], photo.ang[3]), "ixScannerFont", 8, y, color_white)
+			end
+			y = y + 16
+			draw.SimpleText("ID  ("..tostring(photo.id or "UNKNOWN")..")", "ixScannerFont", 8, y, color_white)
+			y = y + 16
+			draw.SimpleText("TRG ("..tostring(photo.trg or "NONE")..")", "ixScannerFont", 8, y, color_white)
+			y = y + 16
+			draw.SimpleText("ZONE("..tostring(photo.zone or "OUTSIDE")..")", "ixScannerFont", 8, y, color_white)
+		end
+	else
+		self.photoViewer.PaintOver = nil
+	end
 end
 
 function COMBINE:Paint(width, height)
@@ -2035,6 +2148,89 @@ function COMBINE:Paint(width, height)
 		draw.SimpleText(L("interactiveComputerObjectives"), "ixComputerCombineBody", contentX + 18, top + 14, COMBINE_DIM, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
 	elseif (IsTerminalReady(self) and self.activeTab == "civil") then
 		draw.SimpleText(L("interactiveComputerCivilData"), "ixComputerCombineBody", contentX + 18, top + 14, COMBINE_DIM, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	elseif (IsTerminalReady(self) and self.activeTab == "liveFeed") then
+		draw.SimpleText(L("interactiveComputerLiveFeed"), "ixComputerCombineBody", contentX + 18, top + 14, COMBINE_DIM, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+	end
+
+	if (IsTerminalReady(self) and self.activeTab) then
+		local factor = 0.38
+		if (self.activeTab == "liveFeed" or self.activeTab == "photoLogs") then
+			factor = 0.16
+		end
+
+		local rosterWidth = math.floor(contentWidth * factor)
+		local editorX = contentX + rosterWidth + 16
+		local editorWidth = contentWidth - rosterWidth - 32
+		local editorHeight = contentHeight - 62
+		local editorY = top + 44
+		local centerX = editorX + editorWidth * 0.5
+		local centerY = editorY + editorHeight * 0.43 -- Slightly higher for better visual centering
+
+		local bracketHeight = editorHeight
+		if (self.activeTab == "civil" or self.activeTab == "objectives") then
+			bracketHeight = editorHeight - 46
+		end
+
+		local function DrawEmptySelectionUI(title, subtitle)
+			DrawCombineLogo(centerX, centerY - 30, editorWidth * 0.12, 220)
+			
+			draw.SimpleText(title, "ixComputerCombineGrid", centerX, centerY + 85, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+			draw.SimpleText(subtitle, "ixComputerDOSTiny", centerX, centerY + 112, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		end
+
+		-- Decorative Corner Brackets (Always show for editor area)
+		local bSize = 16
+		local bThick = 1
+		local bInset = 4
+		surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 40)
+		-- Top-Left
+		surface.DrawRect(editorX + bInset, editorY + bInset, bSize, bThick)
+		surface.DrawRect(editorX + bInset, editorY + bInset, bThick, bSize)
+		-- Top-Right
+		surface.DrawRect(editorX + editorWidth - bInset - bSize, editorY + bInset, bSize, bThick)
+		surface.DrawRect(editorX + editorWidth - bInset, editorY + bInset, bThick, bSize)
+		-- Bottom-Left
+		surface.DrawRect(editorX + bInset, editorY + bracketHeight - bInset, bSize, bThick)
+		surface.DrawRect(editorX + bInset, editorY + bracketHeight - bInset - bSize, bThick, bSize)
+		-- Bottom-Right
+		surface.DrawRect(editorX + editorWidth - bInset - bSize, editorY + bracketHeight - bInset, bSize, bThick)
+		surface.DrawRect(editorX + editorWidth - bInset, editorY + bracketHeight - bInset - bSize, bThick, bSize)
+
+		surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 25)
+		surface.DrawOutlinedRect(editorX, editorY, editorWidth, editorHeight, 1)
+
+		if (self.activeTab == "liveFeed") then
+			if (IsValid(self.selectedCamera) and self.mat) then
+				surface.SetMaterial(self.mat)
+				surface.SetDrawColor(255, 255, 255, 255)
+				surface.DrawTexturedRect(editorX, editorY, editorWidth, editorHeight)
+				surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 60)
+				surface.DrawOutlinedRect(editorX, editorY, editorWidth, editorHeight, 1)
+			else
+				local hasCameras = #self.cameraList:GetLines() > 0
+				DrawEmptySelectionUI(
+					hasCameras and "select camera" or "no cameras detected",
+					hasCameras and "CHOOSE A SOURCE FROM THE LIST TO ESTABLISH LINK" or "NO EXTERNAL CAMERA OR SCANNER INPUT FOUND ON GRID"
+				)
+			end
+		elseif (self.activeTab == "photoLogs") then
+			local selected = self.photoList:GetSelected()[1]
+			if (!selected) then
+				local hasPhotos = #self.photoList:GetLines() > 0
+				DrawEmptySelectionUI(
+					hasPhotos and "select photo" or "no logs found",
+					hasPhotos and "SELECT A TIMESTAMP TO DECRYPT SURVEILLANCE DATA" or "LOCAL SURVEILLANCE STORAGE IS CURRENTLY EMPTY"
+				)
+			end
+		elseif (self.activeTab == "civil") then
+			if (!self.selectedTarget) then
+				local hasUnits = #self.rosterList:GetLines() > 0
+				DrawEmptySelectionUI(
+					hasUnits and "select unit" or "no signals detected",
+					hasUnits and "SELECT A CID TO ACCESS BIOMETRIC AND SERVICE RECORDS" or "NO ACTIVE BIOMETRIC DEVISES OR CID CARDS FOUND"
+				)
+			end
+		end
 	end
 
 	if (!IsTerminalReady(self) or !self.activeTab) then
@@ -2042,10 +2238,27 @@ function COMBINE:Paint(width, height)
 		local centerY = top + contentHeight * 0.42
 		local progress = GetBootProgress(self)
 
-		DrawCombineLogo(centerX, centerY - 30, math.min(contentWidth, contentHeight) * 0.15, 220)
-		draw.SimpleText("overwatch grid", "ixComputerCombineGrid", centerX, centerY + 78, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-		draw.SimpleText(L(IsTerminalReady(self) and "interactiveComputerSelectModule" or (IsBootSequenceActive(self) and "interactiveComputerBooting" or "interactiveComputerPowerOff")), "ixComputerCombineBody", centerX, centerY + 116, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-		draw.SimpleText(IsTerminalReady(self) and "OBJECTIVES / CIVIL DATA / PERSONAL LOG / PUBLIC PANEL" or L("interactiveComputerPowerPrompt"), "ixComputerDOSTiny", centerX, centerY + 144, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		DrawCombineLogo(centerX, centerY - 45, contentWidth * 0.12, 220)
+		draw.SimpleText("overwatch grid", "ixComputerCombineGrid", centerX, centerY + 92, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText(L(IsTerminalReady(self) and "interactiveComputerSelectModule" or (IsBootSequenceActive(self) and "interactiveComputerBooting" or "interactiveComputerPowerOff")), "ixComputerCombineBody", centerX, centerY + 125, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText(IsTerminalReady(self) and "OBJECTIVES / CIVIL DATA / PERSONAL LOG / PUBLIC PANEL" or L("interactiveComputerPowerPrompt"), "ixComputerDOSTiny", centerX, centerY + 154, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+		-- Decorative Corner Brackets (Flash Screen)
+		local bSize = 32
+		local bThick = 1
+		surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 40)
+		-- Top-Left
+		surface.DrawRect(contentX + 16, top + 16, bSize, bThick)
+		surface.DrawRect(contentX + 16, top + 16, bThick, bSize)
+		-- Top-Right
+		surface.DrawRect(contentX + contentWidth - 16 - bSize, top + 16, bSize, bThick)
+		surface.DrawRect(contentX + contentWidth - 16, top + 16, bThick, bSize)
+		-- Bottom-Left
+		surface.DrawRect(contentX + 16, top + contentHeight - 16, bSize, bThick)
+		surface.DrawRect(contentX + 16, top + contentHeight - 16 - bSize, bThick, bSize)
+		-- Bottom-Right
+		surface.DrawRect(contentX + contentWidth - 16 - bSize, top + contentHeight - 16, bSize, bThick)
+		surface.DrawRect(contentX + contentWidth - 16, top + contentHeight - 16 - bSize, bThick, bSize)
 
 		if (!IsTerminalReady(self)) then
 			DrawInsetBox(contentX + 80, top + contentHeight - 86, contentWidth - 160, 18, Color(8, 24, 40), Color(26, 58, 88), Color(8, 18, 32))
@@ -2060,8 +2273,9 @@ function COMBINE:PerformLayout(width, height)
 	or !IsValid(self.rosterList) or !IsValid(self.objectivesEntry) or !IsValid(self.dataEntry)
 	or !IsValid(self.objectiveSaveButton) or !IsValid(self.dataSaveButton)
 	or !IsValid(self.personalLogButton) or !IsValid(self.publicPanelButton)
-	or !IsValid(self.rosterScrollUpButton) or !IsValid(self.rosterScrollDownButton)
-	or !IsValid(self.objectivesTabButton) or !IsValid(self.civilDataTabButton)) then
+	or !IsValid(self.rosterSearch)
+	or !IsValid(self.photoList) or !IsValid(self.photoViewer) or !IsValid(self.cameraList)
+	or !IsValid(self.objectivesTabButton) or !IsValid(self.civilDataTabButton) or !IsValid(self.photoLogsTabButton) or !IsValid(self.liveFeedTabButton)) then
 		return
 	end
 
@@ -2084,7 +2298,12 @@ function COMBINE:PerformLayout(width, height)
 	local navButtonWidth = navWidth - 24
 	local navButtonX = left + 12
 	local navButtonY = top + 40
-	local rosterWidth = math.floor(contentWidth * 0.36)
+	local factor = 0.36
+	if (self.activeTab == "liveFeed" or self.activeTab == "photoLogs") then
+		factor = 0.16
+	end
+
+	local rosterWidth = math.floor(contentWidth * factor)
 	local editorX = contentX + rosterWidth + 16
 	local editorWidth = contentWidth - rosterWidth - 32
 
@@ -2100,26 +2319,38 @@ function COMBINE:PerformLayout(width, height)
 	self.publicPanelButton:SetPos(navButtonX, navButtonY + 146)
 	self.publicPanelButton:SetSize(navButtonWidth, 34)
 
+	self.photoLogsTabButton:SetPos(navButtonX, navButtonY + 188)
+	self.photoLogsTabButton:SetSize(navButtonWidth, 34)
+
+	self.liveFeedTabButton:SetPos(navButtonX, navButtonY + 230)
+	self.liveFeedTabButton:SetSize(navButtonWidth, 34)
+
 	self.objectivesEntry:SetPos(contentX + 18, contentY + 44)
 	self.objectivesEntry:SetSize(contentWidth - 36, contentHeight - 104)
 
 	self.objectiveSaveButton:SetPos(contentX + contentWidth - 198, contentY + contentHeight - 46)
 	self.objectiveSaveButton:SetSize(180, 30)
 
-	self.rosterList:SetPos(contentX + 18, contentY + 44)
-	self.rosterList:SetSize(rosterWidth - 34, contentHeight - 62)
+	self.rosterSearch:SetPos(contentX + 18, contentY + 44)
+	self.rosterSearch:SetSize(rosterWidth, 28)
 
-	self.rosterScrollUpButton:SetPos(contentX + 18 + rosterWidth - 26, contentY + 44)
-	self.rosterScrollUpButton:SetSize(24, 24)
-
-	self.rosterScrollDownButton:SetPos(contentX + 18 + rosterWidth - 26, contentY + 74)
-	self.rosterScrollDownButton:SetSize(24, 24)
+	self.rosterList:SetPos(contentX + 18, contentY + 76)
+	self.rosterList:SetSize(rosterWidth, contentHeight - 94)
 
 	self.dataEntry:SetPos(editorX, contentY + 44)
 	self.dataEntry:SetSize(editorWidth, contentHeight - 104)
 
 	self.dataSaveButton:SetPos(contentX + contentWidth - 188, contentY + contentHeight - 46)
 	self.dataSaveButton:SetSize(170, 30)
+
+	self.photoList:SetPos(contentX + 18, contentY + 44)
+	self.photoList:SetSize(rosterWidth - 10, contentHeight - 62)
+
+	self.photoViewer:SetPos(editorX, contentY + 44)
+	self.photoViewer:SetSize(editorWidth, contentHeight - 62)
+
+	self.cameraList:SetPos(contentX + 18, contentY + 44)
+	self.cameraList:SetSize(rosterWidth - 10, contentHeight - 62)
 
 	self:UpdateVisibleState()
 end
@@ -2128,7 +2359,7 @@ function COMBINE:PopulateSelectedData()
 	local selectedData = ""
 
 	for _, entry in ipairs(self.context.roster or {}) do
-		if (entry.target == self.selectedTarget) then
+		if (entry.id == self.selectedCharID) then
 			selectedData = entry.data and entry.data.text or ""
 			self.statusLabel:SetText(string.format("UNIT: %s | CID: %s", entry.name or "UNKNOWN", entry.cid or "00000"))
 			break
@@ -2136,22 +2367,28 @@ function COMBINE:PopulateSelectedData()
 	end
 
 	self.dataEntry:SetText(selectedData)
-	self.dataEntry:SetEnabled(IsTerminalReady(self) and self.activeTab == "civil" and self.context.canEditData == true and self.selectedTarget != nil)
+	self.dataEntry:SetEnabled(IsTerminalReady(self) and self.activeTab == "civil" and self.context.canEditData == true and self.selectedCharID != nil)
 	self:UpdateStatus()
 end
 
-function COMBINE:LoadComputer(entity, _, powered, context)
-	self.entity = entity
-	self.context = context or {}
-	SetTerminalPowerState(self, powered)
+function COMBINE:PopulateRoster(query)
+	query = string.lower(tostring(query or ""))
+	local previousSelection = self.selectedCharID or (IsValid(self.selectedTarget) and self.selectedTarget:GetCharacter():GetID())
 	self.rosterList:Clear()
 	self.selectedTarget = nil
+	self.selectedCharID = nil
 
-	for _, entry in ipairs(self.context.roster or {}) do
-		local line = self.rosterList:AddLine(string.format("%s [#%s]", entry.name or "UNKNOWN", entry.cid or "00000"))
+	local rosterData = self.context.roster or {}
+	for _, entry in ipairs(rosterData) do
+		if (query != "" and !string.find(string.lower(entry.name), query, 1, true) and !string.find(entry.cid, query, 1, true)) then
+			continue
+		end
+
+		local status = entry.isOnline and "" or " [OFFLINE]"
+		local line = self.rosterList:AddLine(string.format("%s [#%s]%s", entry.name or "UNKNOWN", entry.cid or "00000", status))
+		
 		line.Paint = function(self, width, height)
 			local selected = self:IsSelected()
-
 			surface.SetDrawColor(selected and Color(24, 52, 84, 255) or Color(0, 0, 0, 0))
 			surface.DrawRect(0, 0, width, height)
 			surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, selected and 90 or 18)
@@ -2160,16 +2397,66 @@ function COMBINE:LoadComputer(entity, _, powered, context)
 
 		if (line.Columns) then
 			for _, column in ipairs(line.Columns) do
-				column:SetTextColor(COMBINE_TEXT)
+				column:SetTextColor(entry.isOnline and COMBINE_TEXT or Color(150, 150, 150, 255))
 				column:SetFont("ixComputerDOSTiny")
 			end
 		end
 
 		line.ixTarget = entry.target
+		line.ixCharID = entry.id
+
+		if (previousSelection != nil and previousSelection == entry.id) then
+			self.selectedTarget = entry.target
+			self.selectedCharID = entry.id
+			line:SetSelected(true)
+		end
 	end
 
+	if (self.selectedCharID or self.selectedTarget) then
+		self:PopulateSelectedData()
+	end
+end
+
+function COMBINE:LoadComputer(entity, _, powered, context)
+	self.entity = entity
+	self.context = context or {}
+	SetTerminalPowerState(self, powered)
+
+	self.rosterSearch:SetText("")
+	self.dataEntry:SetText("") -- Clear before populating, so selection can override it
+
+	self:PopulateRoster()
+
+	self.selectedCamera = nil
+	self:RefreshCameraList()
+
+	self.photoList:Clear()
+	local photoLogs = self.context.photoLogs or {}
+	for _, photo in ipairs(photoLogs) do
+			local timestamp = os.date("%H:%M:%S", photo.time or 0)
+			local typeStr = photo.isSurveillance and L("SurveillanceCapture") or L("ScannerCapture")
+			local line = self.photoList:AddLine(timestamp, typeStr)
+
+			line.Paint = function(self, width, height)
+				local selected = self:IsSelected()
+				surface.SetDrawColor(selected and Color(24, 52, 84, 255) or Color(0, 0, 0, 0))
+				surface.DrawRect(0, 0, width, height)
+				surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, selected and 90 or 18)
+				surface.DrawOutlinedRect(0, 0, width, height, 1)
+			end
+
+			if (line.Columns) then
+				for _, column in ipairs(line.Columns) do
+					column:SetTextColor(COMBINE_TEXT)
+					column:SetFont("ixComputerDOSTiny")
+				end
+			end
+
+			line.ixPhotoData = photo
+		end
+
+	self.photoViewer:SetHTML("")
 	self.objectivesEntry:SetText((self.context.objectives and self.context.objectives.text) or "")
-	self.dataEntry:SetText("")
 	self.objectivesEntry:SetEnabled(self.context.canEditObjectives == true and IsTerminalReady(self))
 	self:UpdateVisibleState()
 	self:UpdateStatus()
@@ -2184,6 +2471,39 @@ function COMBINE:Think()
 	local wasBooting = IsBootSequenceActive(self)
 	UpdateBootSequence(self)
 
+	local cto = ix.plugin.Get("cto")
+	if (cto) then
+		if (IsTerminalReady(self) and self.activeTab == "liveFeed") then
+			self:RefreshCameraList()
+
+			if (IsValid(self.selectedCamera)) then
+				-- Ensure texture exists on panel
+				if (!self.tex or !self.mat) then
+					cto.terminalMaterialIdx = (cto.terminalMaterialIdx or 0) + 1
+					self.tex = GetRenderTarget("ctouiunique" .. cto.terminalMaterialIdx, 512, 256, false)
+					self.mat = CreateMaterial("ctouiunique" .. cto.terminalMaterialIdx, "UnlitGeneric", {
+						["$basetexture"] = self.tex,
+					})
+
+					-- Mock entity methods so CTO can use the panel as a render target
+					self.GetNWEntity = function(_, key)
+						if (key == "camera") then
+							return self.selectedCamera
+						end
+					end
+					self.SetSubMaterial = function() end -- Dummy to prevent drawing on model
+				end
+
+				-- Tell CTO to draw to this panel
+				cto.terminalsToDraw[self] = true
+			else
+				cto.terminalsToDraw[self] = nil
+			end
+		else
+			cto.terminalsToDraw[self] = nil
+		end
+	end
+
 	if (wasBooting != IsBootSequenceActive(self)) then
 		self:UpdateVisibleState()
 		self:UpdateStatus()
@@ -2191,6 +2511,15 @@ function COMBINE:Think()
 end
 
 function COMBINE:OnRemove()
+	local cto = ix.plugin.Get("cto")
+	if (cto and cto.terminalsToDraw) then
+		cto.terminalsToDraw[self] = nil
+
+		if (IsValid(self.entity)) then
+			cto.terminalsToDraw[self.entity] = nil
+		end
+	end
+
 	if (IsValid(self.entity)) then
 		netstream.Start("ixInteractiveComputerEndUse", self.entity)
 	end
@@ -2200,7 +2529,85 @@ function COMBINE:OnRemove()
 	end
 end
 
+function COMBINE:RefreshCameraList()
+	if (self.nextCameraRefresh and self.nextCameraRefresh > CurTime()) then
+		return
+	end
+
+	self.nextCameraRefresh = CurTime() + 1.5
+
+	local cameras = {}
+	for _, v in ipairs(ents.FindByClass("npc_combine_camera")) do
+		cameras[v] = "C-i" .. v:EntIndex()
+	end
+	
+	for _, v in ipairs(ents.FindByClass("ix_scanner")) do
+		local pilot = v:GetPilot()
+		if (IsValid(pilot)) then
+			cameras[v] = v:GetNetVar("ixScannerName", "SCN-" .. v:EntIndex())
+		end
+	end
+	
+	local currentLines = self.cameraList:GetLines()
+	local needsRefresh = false
+	
+	if (#currentLines != table.Count(cameras)) then
+		needsRefresh = true
+	else
+		for _, line in ipairs(currentLines) do
+			if (!IsValid(line.ixCamera) or !cameras[line.ixCamera]) then
+				needsRefresh = true
+				break
+			end
+		end
+	end
+
+	if (needsRefresh) then
+		local previousSelection = self.selectedCamera
+		self.cameraList:Clear()
+		self.selectedCamera = nil
+ 
+		for ent, name in pairs(cameras) do
+			local line = self.cameraList:AddLine(name)
+			line.Paint = function(panel, width, height)
+				local selected = panel:IsSelected()
+				surface.SetDrawColor(selected and Color(24, 52, 84, 255) or Color(0, 0, 0, 0))
+				surface.DrawRect(0, 0, width, height)
+				surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, selected and 90 or 18)
+				surface.DrawOutlinedRect(0, 0, width, height, 1)
+			end
+
+			if (line.Columns) then
+				for _, column in ipairs(line.Columns) do
+					column:SetTextColor(COMBINE_TEXT)
+					column:SetFont("ixComputerDOSTiny")
+				end
+			end
+
+			line.ixCamera = ent
+
+			if (ent == previousSelection) then
+				self.selectedCamera = ent
+			line:SetSelected(true)
+		end
+	end
+
+		self:UpdateStatus()
+	end
+end
+
 vgui.Register("ixInteractiveCombineTerminal", COMBINE, "DFrame")
+
+hook.Add("UpdateAnimation", "ixInteractiveComputerAnimationFix", function(ply, velocity, maxSeqGroundSpeed)
+	local terminal = ply:GetNetVar("ixUsingTerminal")
+	if (IsValid(terminal)) then
+		local targetPos = terminal:WorldSpaceCenter()
+		local aimAngles = (targetPos - ply:GetShootPos()):Angle()
+		
+		ply:SetPoseParameter("aim_pitch", math.NormalizeAngle(aimAngles.p))
+		ply:SetPoseParameter("aim_yaw", math.NormalizeAngle(aimAngles.y - ply:GetAngles().y))
+	end
+end)
 
 local CIVIC = {}
 
@@ -2344,18 +2751,6 @@ function CIVIC:Init()
 		)
 	end
 
-	self.postScrollUpButton = self:Add("DButton")
-	self.postScrollUpButton:SetText("∧")
-	self.postScrollUpButton:SetFont("ixComputerDOSBody")
-	self.postScrollUpButton:SetTextColor(COMBINE_TEXT)
-
-	self.postScrollDownButton = self:Add("DButton")
-	self.postScrollDownButton:SetText("∨")
-	self.postScrollDownButton:SetFont("ixComputerDOSBody")
-	self.postScrollDownButton:SetTextColor(COMBINE_TEXT)
-	BindScrollHoldButton(self.postScrollUpButton, function() return IsValid(self.postList) and self.postList.VBar or nil end, -72)
-	BindScrollHoldButton(self.postScrollDownButton, function() return IsValid(self.postList) and self.postList.VBar or nil end, 72)
-
 	self.questionEntry = self:Add("DTextEntry")
 	self.questionEntry:SetFont("ixComputerDOSBody")
 	self.questionEntry:SetUpdateOnType(true)
@@ -2459,18 +2854,6 @@ function CIVIC:Init()
 
 		netstream.Start("ixInteractiveComputerDeleteQuestion", self.entity, self.selectedQuestionIndex)
 	end
-
-	self.questionScrollUpButton = self:Add("DButton")
-	self.questionScrollUpButton:SetText("∧")
-	self.questionScrollUpButton:SetFont("ixComputerDOSBody")
-	self.questionScrollUpButton:SetTextColor(COMBINE_TEXT)
-
-	self.questionScrollDownButton = self:Add("DButton")
-	self.questionScrollDownButton:SetText("∨")
-	self.questionScrollDownButton:SetFont("ixComputerDOSBody")
-	self.questionScrollDownButton:SetTextColor(COMBINE_TEXT)
-	BindScrollHoldButton(self.questionScrollUpButton, function() return IsValid(self.questionList) and self.questionList.VBar or nil end, -72)
-	BindScrollHoldButton(self.questionScrollDownButton, function() return IsValid(self.questionList) and self.questionList.VBar or nil end, 72)
 
 	self:Center()
 	self:MakePopup()
@@ -2641,8 +3024,6 @@ function CIVIC:UpdateVisibleState()
 	self.questionsTabButton:SetEnabled(isReady)
 
 	self.postList:SetVisible(showPosts)
-	self.postScrollUpButton:SetVisible(showPosts)
-	self.postScrollDownButton:SetVisible(showPosts)
 	self.postNewButton:SetVisible(showPosts and self.context.canEdit == true)
 	self.postDeleteButton:SetVisible(showPosts and self.context.canEdit == true and self.selectedPostIndex != nil)
 	self.announcementEntry:SetVisible(showPosts)
@@ -2656,8 +3037,6 @@ function CIVIC:UpdateVisibleState()
 	self.questionNewButton:SetVisible(showQuestions and self.context.canAsk == true)
 	self.askButton:SetVisible(showQuestions and self.context.canAsk == true)
 	self.questionList:SetVisible(showQuestions)
-	self.questionScrollUpButton:SetVisible(showQuestions)
-	self.questionScrollDownButton:SetVisible(showQuestions)
 	self.answerEntry:SetVisible(showQuestions)
 	self.questionDeleteButton:SetVisible(showQuestions and self.context.canEdit == true and self.selectedQuestionIndex != nil)
 	self.answerButton:SetVisible(showQuestions and self.context.canEdit == true and self.selectedQuestionIndex != nil)
@@ -2668,6 +3047,18 @@ end
 
 function CIVIC:Paint(width, height)
 	DrawCombineBackdrop(width, height, L("interactiveComputerCivicTitle"))
+
+	-- Scanlines logic
+	surface.SetDrawColor(0, 0, 0, 15)
+	for i = 0, height, 4 do
+		surface.DrawRect(0, i, width, 1)
+	end
+
+	surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 3)
+	for i = 0, height, 100 do
+		local y = (i + CurTime() * 15) % height
+		surface.DrawRect(0, y, width, 25)
+	end
 
 	local navX = 22
 	local top = 92
@@ -2688,15 +3079,58 @@ function CIVIC:Paint(width, height)
 		draw.SimpleText(L("interactiveComputerQuestionsModule"), "ixComputerCombineBody", contentX + 18, top + 14, COMBINE_DIM, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
 	end
 
+	if (IsTerminalReady(self) and self.activeTab) then
+		local listWidth = math.floor(contentWidth * 0.34)
+		local editorX = contentX + listWidth + 16
+		local editorWidth = contentWidth - listWidth - 34
+		local editorY = top + 44
+		local editorHeight = contentHeight - 62
+
+		-- Decorative Corner Brackets (Always show for editor area)
+		local bSize = 16
+		local bThick = 1
+		local bInset = 4
+		surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 40)
+		-- Top-Left
+		surface.DrawRect(editorX + bInset, editorY + bInset, bSize, bThick)
+		surface.DrawRect(editorX + bInset, editorY + bInset, bThick, bSize)
+		-- Top-Right
+		surface.DrawRect(editorX + editorWidth - bInset - bSize, editorY + bInset, bSize, bThick)
+		surface.DrawRect(editorX + editorWidth - bInset, editorY + bInset, bThick, bSize)
+		-- Bottom-Left
+		surface.DrawRect(editorX + bInset, editorY + editorHeight - bInset, bSize, bThick)
+		surface.DrawRect(editorX + bInset, editorY + editorHeight - bInset - bSize, bThick, bSize)
+		-- Bottom-Right
+		surface.DrawRect(editorX + editorWidth - bInset - bSize, editorY + editorHeight - bInset, bSize, bThick)
+		surface.DrawRect(editorX + editorWidth - bInset, editorY + editorHeight - bInset - bSize, bThick, bSize)
+	end
+
 	if (!IsTerminalReady(self) or !self.activeTab) then
 		local centerX = contentX + contentWidth * 0.5
 		local centerY = top + contentHeight * 0.42
 		local progress = GetBootProgress(self)
 
 		DrawCombineLogo(centerX, centerY - 30, math.min(contentWidth, contentHeight) * 0.15, 220)
-		draw.SimpleText("civic uplink", "ixComputerCombineGrid", centerX, centerY + 78, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+		draw.SimpleText("civic uplink", "ixComputerCombineGrid", centerX, centerY + 85, COMBINE_TEXT, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 		draw.SimpleText(L(IsTerminalReady(self) and "interactiveComputerSelectModule" or (IsBootSequenceActive(self) and "interactiveComputerBooting" or "interactiveComputerPowerOff")), "ixComputerCombineBody", centerX, centerY + 116, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 		draw.SimpleText(IsTerminalReady(self) and "NOTICE / AGENDA / Q&A" or L("interactiveComputerPowerPrompt"), "ixComputerDOSTiny", centerX, centerY + 144, COMBINE_DIM, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+		-- Decorative Corner Brackets (Flash Screen)
+		local bSize = 32
+		local bThick = 1
+		surface.SetDrawColor(COMBINE_TEXT.r, COMBINE_TEXT.g, COMBINE_TEXT.b, 40)
+		-- Top-Left
+		surface.DrawRect(contentX + 16, top + 16, bSize, bThick)
+		surface.DrawRect(contentX + 16, top + 16, bThick, bSize)
+		-- Top-Right
+		surface.DrawRect(contentX + contentWidth - 16 - bSize, top + 16, bSize, bThick)
+		surface.DrawRect(contentX + contentWidth - 16, top + 16, bThick, bSize)
+		-- Bottom-Left
+		surface.DrawRect(contentX + 16, top + contentHeight - 16, bSize, bThick)
+		surface.DrawRect(contentX + 16, top + contentHeight - 16 - bSize, bThick, bSize)
+		-- Bottom-Right
+		surface.DrawRect(contentX + contentWidth - 16 - bSize, top + contentHeight - 16, bSize, bThick)
+		surface.DrawRect(contentX + contentWidth - 16, top + contentHeight - 16 - bSize, bThick, bSize)
 
 		if (!IsTerminalReady(self)) then
 			DrawInsetBox(contentX + 80, top + contentHeight - 86, contentWidth - 160, 18, Color(8, 24, 40), Color(26, 58, 88), Color(8, 18, 32))
@@ -2709,9 +3143,7 @@ end
 function CIVIC:PerformLayout(width, height)
 	if (!IsValid(self.closeButton) or !IsValid(self.powerButton) or !IsValid(self.backButton) or !IsValid(self.statusLabel)
 	or !IsValid(self.announcementTabButton) or !IsValid(self.propagandaTabButton) or !IsValid(self.questionsTabButton)
-	or !IsValid(self.questionDeleteButton)
-	or !IsValid(self.postScrollUpButton) or !IsValid(self.postScrollDownButton)
-	or !IsValid(self.questionScrollUpButton) or !IsValid(self.questionScrollDownButton)) then
+	or !IsValid(self.questionDeleteButton)) then
 		return
 	end
 
@@ -2750,13 +3182,7 @@ function CIVIC:PerformLayout(width, height)
 	self.questionsTabButton:SetSize(navButtonWidth, 34)
 
 	self.postList:SetPos(contentX + 18, contentY + 44)
-	self.postList:SetSize(listWidth - 34, contentHeight - 62)
-
-	self.postScrollUpButton:SetPos(contentX + 18 + listWidth - 26, contentY + 44)
-	self.postScrollUpButton:SetSize(24, 24)
-
-	self.postScrollDownButton:SetPos(contentX + 18 + listWidth - 26, contentY + 74)
-	self.postScrollDownButton:SetSize(24, 24)
+	self.postList:SetSize(listWidth, contentHeight - 62)
 
 	self.announcementEntry:SetPos(editorX, contentY + 44)
 	self.announcementEntry:SetSize(editorWidth, 28)
@@ -2783,13 +3209,7 @@ function CIVIC:PerformLayout(width, height)
 	self.askButton:SetSize(152, 28)
 
 	self.questionList:SetPos(contentX + 18, contentY + 84)
-	self.questionList:SetSize(listWidth - 34, contentHeight - 102)
-
-	self.questionScrollUpButton:SetPos(contentX + 18 + listWidth - 26, contentY + 84)
-	self.questionScrollUpButton:SetSize(24, 24)
-
-	self.questionScrollDownButton:SetPos(contentX + 18 + listWidth - 26, contentY + 114)
-	self.questionScrollDownButton:SetSize(24, 24)
+	self.questionList:SetSize(listWidth, contentHeight - 102)
 
 	self.questionBodyEntry:SetPos(editorX, contentY + 84)
 	self.questionBodyEntry:SetSize(editorWidth, math.floor(contentHeight * 0.36))
@@ -2933,10 +3353,6 @@ local function ApplyCivicStyling(frame)
 	StyleCombineButton(frame.askButton)
 	StyleCombineButton(frame.answerButton)
 	StyleCombineButton(frame.questionDeleteButton)
-	StyleCombineButton(frame.postScrollUpButton)
-	StyleCombineButton(frame.postScrollDownButton)
-	StyleCombineButton(frame.questionScrollUpButton)
-	StyleCombineButton(frame.questionScrollDownButton)
 	frame.closeButton.Paint = function(_, width, height)
 		surface.SetDrawColor(0, 0, 0, 0)
 		surface.DrawRect(0, 0, width, height)
@@ -2965,10 +3381,6 @@ local function ApplyCivicStyling(frame)
 	BindButtonClickSound(frame.askButton, frame)
 	BindButtonClickSound(frame.answerButton, frame)
 	BindButtonClickSound(frame.questionDeleteButton, frame)
-	BindButtonClickSound(frame.postScrollUpButton, frame)
-	BindButtonClickSound(frame.postScrollDownButton, frame)
-	BindButtonClickSound(frame.questionScrollUpButton, frame)
-	BindButtonClickSound(frame.questionScrollDownButton, frame)
 	BindEnterSound(frame.announcementEntry, frame)
 	BindEnterSound(frame.propagandaEntry, frame)
 	BindEnterSound(frame.questionEntry, frame)
@@ -3016,6 +3428,30 @@ netstream.Hook("ixInteractiveComputerOpen", function(entity, data, powered, cont
 	end
 
 	OpenComputerUI(entity, data, powered, context)
+end)
+
+netstream.Hook("ixInteractiveComputerSendPhoto", function(photoData)
+	if (!IsValid(ix.gui.interactiveComputer) or !ix.gui.interactiveComputer.context or !ix.gui.interactiveComputer.context.photoLogs) then
+		return
+	end
+
+	-- Update cached photo data
+	for k, photo in ipairs(ix.gui.interactiveComputer.context.photoLogs) do
+		if (math.floor(photo.time) == math.floor(photoData.time)) then
+			for field, val in pairs(photoData) do
+				photo[field] = val
+			end
+			
+			-- If currently viewing this photo, refresh
+			if (ix.gui.interactiveComputer.activeTab == "photoLogs") then
+				local selected = ix.gui.interactiveComputer.photoList:GetSelected()
+				if (selected and selected[1] and selected[1].ixPhotoData == photo) then
+					ix.gui.interactiveComputer:ViewPhoto(photo)
+				end
+			end
+			break
+		end
+	end
 end)
 
 netstream.Hook("ixInteractiveComputerSync", function(entity, data, powered, context)

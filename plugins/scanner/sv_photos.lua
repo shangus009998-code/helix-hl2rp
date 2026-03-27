@@ -2,15 +2,64 @@ local PLUGIN = PLUGIN
 
 util.AddNetworkString("ixScannerData")
 util.AddNetworkString("ixScannerPicture")
+util.AddNetworkString("ixSurveillancePhotoRequest")
+
+PLUGIN.photoHistory = PLUGIN.photoHistory or {}
 
 net.Receive("ixScannerData", function(length, ply)
-    if (IsValid(ply.ixScn) and ply:GetViewEntity() == ply.ixScn and (ply.ixNextPic or 0) < CurTime()) then
+    local isSurveillance = net.ReadBool()
+    local length = net.ReadUInt(16)
+    local data = net.ReadData(length)
+
+    local pos = net.ReadVector()
+    local ang = net.ReadAngle()
+    local id = net.ReadString()
+    
+    local trg = "NONE"
+    if (isSurveillance) then
+        local targetEnt = net.ReadEntity()
+
+        if (IsValid(targetEnt)) then
+            if (targetEnt:IsPlayer()) then
+                local char = targetEnt:GetCharacter()
+
+                if (char) then
+                    local inventory = char:GetInventory()
+                    local cidItem = inventory and inventory:HasItem("cid")
+
+                    if (cidItem) then
+                        trg = cidItem:GetData("name", targetEnt:Name())
+                    else
+                        local faction = ix.faction.Get(targetEnt:Team())
+                        trg = faction and faction.name or targetEnt:Name()
+                    end
+                else
+                    trg = targetEnt:Name()
+                end
+            else
+                trg = targetEnt:GetClass()
+            end
+        elseif (targetEnt and targetEnt:IsWorld()) then
+            trg = "WORLD"
+        end
+    else
+        trg = net.ReadString()
+    end
+
+    local zone = net.ReadString()
+
+    local canCapture = false
+    if (isSurveillance) then
+        -- We trust the client if we're doing surveillance, 
+        -- but we could add a check if they were actually requested.
+        canCapture = true
+    elseif (IsValid(ply.ixScn) and ply:GetViewEntity() == ply.ixScn and (ply.ixNextPic or 0) < CurTime()) then
         local delay = 15
         ply.ixNextPic = CurTime() + delay - 1
+        canCapture = true
+    end
 
-        local length = net.ReadUInt(16)
-        local data = net.ReadData(length)
-
+    if (canCapture) then
         if (length != #data) then
             return
         end
@@ -25,9 +74,31 @@ net.Receive("ixScannerData", function(length, ply)
 
         if (#receivers > 0) then
             net.Start("ixScannerData")
+                net.WriteBool(isSurveillance) 
                 net.WriteUInt(#data, 16)
                 net.WriteData(data, #data)
+                net.WriteVector(pos)
+                net.WriteAngle(ang)
+                net.WriteString(id)
+                net.WriteString(trg)
+                net.WriteString(zone)
             net.Send(receivers)
+        end
+
+        -- Store in history for Combine Computer
+        table.insert(PLUGIN.photoHistory, 1, {
+            data = data,
+            isSurveillance = isSurveillance,
+            time = os.time(),
+            pos = pos,
+            ang = ang,
+            id = id,
+            trg = trg,
+            zone = zone
+        })
+
+        if (#PLUGIN.photoHistory > 12) then
+            table.remove(PLUGIN.photoHistory)
         end
     end
 end)

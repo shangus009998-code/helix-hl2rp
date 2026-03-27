@@ -10,12 +10,20 @@ function PLUGIN:Tick()
 			local camera = ent:GetNWEntity("camera")
 
 			if (IsValid(camera) and camera:GetClass() == "npc_combine_camera") then
-				local bonePos, boneAngles = camera:GetBonePosition(camera:LookupBone("Combine_Camera.bone1"))
-				local camPos, camAngles = camera:GetBonePosition(camera:LookupBone("Combine_Camera.Lens"))
+				if (!ent.bone1) then
+					ent.bone1 = camera:LookupBone("Combine_Camera.bone1")
+					ent.lens = camera:LookupBone("Combine_Camera.Lens")
+				end
+
+				local bonePos, boneAngles = camera:GetBonePosition(ent.bone1)
+				local camPos, camAngles = camera:GetBonePosition(ent.lens)
+
+				if (!bonePos or !camPos) then return end
 
 				boneAngles.roll = boneAngles.roll + 90
 
-				local bulbColor = camera:GetChildren()[1]:GetColor()
+				local children = camera:GetChildren()
+				local bulbColor = (children[1] and IsValid(children[1])) and children[1]:GetColor() or color_white
 				local statusText = "All Clear"
 				local signalText = "[512x256/p15@TR42/036]#=i" .. camera:EntIndex() .. "y=" .. math.floor(boneAngles.yaw) .. "&r=" .. math.floor(boneAngles.roll)
 				if (bulbColor.g == 128) then
@@ -27,6 +35,7 @@ function PLUGIN:Tick()
 				render.PushRenderTarget(ent.tex)
 					if (self:isCameraEnabled(camera)) then
 						if (ent.lastCamOutputTime == nil or RealTime() - ent.lastCamOutputTime >= (1 / 15)) then
+							render.Clear(0, 0, 0, 255, true, true)
 							render.RenderView({
 								origin = camPos + (boneAngles:Forward() * 2.8),
 								angles = boneAngles,
@@ -56,10 +65,66 @@ function PLUGIN:Tick()
 					cam.End2D()
 				render.PopRenderTarget()
 
-				ent.mat:SetTexture("$basetexture", ent.tex)
-				ent:SetSubMaterial(1, "!" .. ent.mat:GetName())
-			else
-				ent:SetSubMaterial(1, "models/props_combine/combine_interface_disp")
+				if (ent.mat and ent.GetSubMaterial and (ent.ixAppliedMat != ent.mat:GetName())) then
+					ent:SetSubMaterial(1, "!" .. ent.mat:GetName())
+					ent.ixAppliedMat = ent.mat:GetName()
+				end
+			elseif (IsValid(camera) and camera:GetClass() == "ix_scanner") then
+				local camPos = camera:GetPos()
+				local camAngles = camera:GetAngles()
+				local pilot = camera:GetPilot()
+				local bScanning = IsValid(pilot) and pilot:GetNetVar("ixScanning")
+
+				render.PushRenderTarget(ent.tex)
+					if (bScanning) then
+						if (ent.lastCamOutputTime == nil or RealTime() - ent.lastCamOutputTime >= (1 / 15)) then
+							local oldNoDraw = camera:GetNoDraw()
+							camera:SetNoDraw(true)
+
+							render.Clear(0, 0, 0, 255, true, true)
+							render.RenderView({
+								origin = camPos + (camAngles:Forward() * 14),
+								angles = camAngles,
+								fov = 90,
+								aspect = 2,
+								x = 0,
+								y = 0,
+								w = 512,
+								h = 256,
+								drawviewmodel = false
+							})
+
+							camera:SetNoDraw(oldNoDraw)
+
+							ent.lastCamOutputTime = RealTime()
+						end
+					else
+						render.Clear(0, 0, 0, 255, false, true)
+					end
+
+					cam.Start2D()
+						local bulbColor = bScanning and Color(115, 200, 255) or Color(255, 0, 0)
+						local statusText = bScanning and "PILOTED" or "NO SIGNAL"
+
+						draw.SimpleText("<:: S-i" .. camera:EntIndex() .. " ::>", "BudgetLabel", 4, 6)
+						draw.SimpleText("<:: " .. statusText .. " ::>", "BudgetLabel", 4, 6 + draw.GetFontHeight("BudgetLabel"), bulbColor)
+						draw.SimpleText(camera:GetNetVar("ixScannerName", "SCN"), "BudgetLabel", 4, 252 - draw.GetFontHeight("BudgetLabel"), bulbColor)
+						
+						if (!bScanning) then
+							draw.SimpleText("CONNECTION LOST", "BudgetLabel", 256, 128, Color(255, 0, 0), 1, 1)
+						end
+					cam.End2D()
+				render.PopRenderTarget()
+
+				if (ent.mat and ent.GetSubMaterial and (ent.ixAppliedMat != ent.mat:GetName())) then
+					ent:SetSubMaterial(1, "!" .. ent.mat:GetName())
+					ent.ixAppliedMat = ent.mat:GetName()
+				end
+			elseif (ent.SetSubMaterial) then
+				if (ent.ixAppliedMat != "models/props_combine/combine_interface_disp") then
+					ent:SetSubMaterial(1, "models/props_combine/combine_interface_disp")
+					ent.ixAppliedMat = "models/props_combine/combine_interface_disp"
+				end
 			end
 		end
 	end
@@ -91,8 +156,8 @@ function PLUGIN:HUDPaint()
 		local bUnobstruct = ix.config.Get("biosignalUnobstruct")
 		local biosignalDist = ix.config.Get("biosignalDistance")
 
-		local beholder = client
-		local beholderEyePos = beholder:EyePos()
+		local beholder = (IsValid(client.ixScn) and client:GetViewEntity() == client.ixScn) and client.ixScn or client
+		local beholderEyePos = (beholder == client) and beholder:EyePos() or beholder:WorldSpaceCenter()
 
 		local biosignalExpiry = ix.config.Get("expireBiosignals")
 
@@ -135,12 +200,21 @@ function PLUGIN:HUDPaint()
 
 				if (toScreen.visible) then
 					local text = "<:: " .. (data.unitID or "???") .. " ::>"
-					local color = team.GetColor(unit:Team()) or color_white
+					local color = color_white
+					if (unit:IsPlayer()) then
+						color = team.GetColor(unit:Team())
+					else
+						color = (FACTION_MPF and team.GetColor(FACTION_MPF)) or Color(150, 150, 200)
+					end
 
 					local showDetail = (Vector(toScreen.x, toScreen.y):Distance(halfScrVector) <= lowDetailBox)
 
 					if (showDetail) then
-						text = "<:: " .. unit:Name() .. " ::>"
+						if (unit:IsPlayer()) then
+							text = "<:: " .. unit:Name() .. " ::>"
+						else
+							text = "<:: " .. (data.unitIDFull or data.unitID or "SCANNER") .. " ::>"
+						end
 					end
 
 					local timeSince = math.Round(curTime - data.time, 2)
@@ -222,6 +296,10 @@ function PLUGIN:HUDPaint()
 								violations[#violations + 1] = "<:: 1x" .. L("Missing CID") .. " ::>"
 							elseif (vio == self.VIOLATION_SUSPECTED_VIOLENCE) then
 								violations[#violations + 1] = "<:: 1x" .. L("Suspected Violent Act") .. " ::>"
+							elseif (vio == self.VIOLATION_SEARCHING_TRASH) then
+								violations[#violations + 1] = "<:: 1x" .. L("Searching Trash") .. " ::>"
+							elseif (vio == self.VIOLATION_MULTIPLE_CIDS) then
+								violations[#violations + 1] = "<:: 1x" .. L("Multiple CIDs") .. " ::>"
 							end
 						end
 					end
@@ -265,19 +343,32 @@ function PLUGIN:HUDPaint()
 		local maximumDistance = ix.config.Get("citizenDistance")
 
 		-- If we are using suit zoom.
-		if (client:GetFOV() < 40) then
+		if (client:GetFOV() < 40 or beholder != client) then
 			maximumDistance = maximumDistance * 3
 		end
 
 		-- Draw movement violations.
 		if (!client:GetNetVar("IsBiosignalGone", false)) then
-			for _, v in pairs(player.GetAll()) do
-				if (v != client and self:CanFlagTargetForViolation(v) and beholderEyePos:Distance(v:GetPos()) <= maximumDistance and v:GetMoveType() != MOVETYPE_NOCLIP) then
-					local physBone = v:LookupBone("ValveBiped.Bip01_Head1")
+			local players = player.GetAll()
+			local bSuitZoom = client:GetFOV() < 40 or beholder != client
+			local maxDistSq = maximumDistance * maximumDistance
+
+			for i = 1, #players do
+				local v = players[i]
+				if (v == client or v:GetMoveType() == MOVETYPE_NOCLIP) then continue end
+
+				local distSq = beholderEyePos:DistToSqr(v:GetPos())
+				if (distSq > maxDistSq) then continue end
+
+				if (self:CanFlagTargetForViolation(v)) then
+					if (!v.headBone) then
+						v.headBone = v:LookupBone("ValveBiped.Bip01_Head1")
+					end
+
 					local position = nil
 
-					if (physBone) then
-						local bonePosition = v:GetBonePosition(physBone)
+					if (v.headBone) then
+						local bonePosition = v:GetBonePosition(v.headBone)
 
 						if (bonePosition) then
 							position = bonePosition + Vector(0, 0, 16)
@@ -287,34 +378,44 @@ function PLUGIN:HUDPaint()
 					end
 
 					local toScreen = position:ToScreen()
-
-					if (toScreen.visible and beholder:IsLineOfSightClear(v)) then
-						local showDetail = (Vector(toScreen.x, toScreen.y):Distance(halfScrVector) <= lowDetailBox)
-						local CID = Schema:GetCitizenID(v) or "UNKNOWN"
-						
-						if (!v:IsCombine() and ix.config.Get("useTagSystem") and beholderEyePos:Distance(v:GetPos()) <= (maximumDistance / 6) and !v:GetCharacter():GetData("IsCIDTagGone") and CID != "") then
-							local text = "<:: c#" .. CID .. " ::>"
-							local color = team.GetColor(v:Team()) or color_white
-
-							draw.SimpleText(showDetail and text or lowDetailText, "BudgetLabel", toScreen.x, toScreen.y, color, 1, 1)
-							toScreen.y = toScreen.y + fontHeight
+					
+					if (toScreen.visible) then
+						-- Throttle LOS check: Every 0.5s for each player
+						if ((v.ixNextHUDTrace or 0) < curTime) then
+							v.ixNextHUDTrace = curTime + 0.5
+							v.ixHUDVisible = beholder:IsLineOfSightClear(v)
 						end
 
-						local violations = {}
+						if (v.ixHUDVisible) then
+							local showDetail = (Vector(toScreen.x, toScreen.y):Distance(halfScrVector) <= lowDetailBox)
+							local CID = Schema:GetCitizenID(v) or "UNKNOWN"
+							
+							if (!v:IsCombine() and ix.config.Get("useTagSystem") and distSq <= (maxDistSq / 36) and !v:GetCharacter():GetData("IsCIDTagGone") and CID != "") then
+								local text = "<:: c#" .. CID .. " ::>"
+								local color = team.GetColor(v:Team()) or color_white
 
-						if (v:IsRunning()) then violations[#violations + 1] = "<:: 1x" .. L("Running") .. " ::>" end
-						if (!v:OnGround() and client:WaterLevel() <= 0) then violations[#violations + 1] = "<:: 1x" .. L("Jumping") .. " ::>" end
-						if (v:Crouching()) then violations[#violations + 1] = "<:: 1x" .. L("Ducking") .. " ::>" end
-						if (v:GetLocalVar("ragdoll")) then violations[#violations + 1] = "<:: 1x" .. L("Laying") .. " ::>"	end
-						if (self:IsSuspectedViolentAct(v)) then violations[#violations + 1] = "<:: 1x" .. L("Suspected Violent Act") .. " ::>" end
-						if (self:IsVisibleWeaponViolation(v)) then violations[#violations + 1] = "<:: 1x" .. L("Unauthorized Weapon Possession") .. " ::>" end
-
-						if (#violations > 0) then
-							draw.SimpleText("<:: " .. L("Possible Violation") .. " ::>", "BudgetLabel", toScreen.x, toScreen.y, colorRed, 1, 1)
-
-							for i, violation in ipairs(violations) do
+								draw.SimpleText(showDetail and text or lowDetailText, "BudgetLabel", toScreen.x, toScreen.y, color, 1, 1)
 								toScreen.y = toScreen.y + fontHeight
-								draw.SimpleText(showDetail and violation or lowDetailText, "BudgetLabel", toScreen.x, toScreen.y, color_white, 1, 1)
+							end
+
+							local violations = {}
+
+							if (v:IsRunning()) then violations[#violations + 1] = "<:: 1x" .. L("Running") .. " ::>" end
+							if (!v:OnGround() and client:WaterLevel() <= 0) then violations[#violations + 1] = "<:: 1x" .. L("Jumping") .. " ::>" end
+							if (v:Crouching()) then violations[#violations + 1] = "<:: 1x" .. L("Ducking") .. " ::>" end
+							if (v:GetLocalVar("ragdoll")) then violations[#violations + 1] = "<:: 1x" .. L("Laying") .. " ::>"	end
+							if (self:IsSuspectedViolentAct(v)) then violations[#violations + 1] = "<:: 1x" .. L("Suspected Violent Act") .. " ::>" end
+							if (self:IsVisibleWeaponViolation(v)) then violations[#violations + 1] = "<:: 1x" .. L("Unauthorized Weapon Possession") .. " ::>" end
+							if (v:GetNetVar("isSearchingLoot")) then violations[#violations + 1] = "<:: 1x" .. L("Searching Trash") .. " ::>" end
+							if (self:HasMultipleCIDs(v)) then violations[#violations + 1] = "<:: 1x" .. L("Multiple CIDs") .. " ::>" end
+
+							if (#violations > 0) then
+								draw.SimpleText("<:: " .. L("Possible Violation") .. " ::>", "BudgetLabel", toScreen.x, toScreen.y, colorRed, 1, 1)
+
+								for i_v, violation in ipairs(violations) do
+									toScreen.y = toScreen.y + fontHeight
+									draw.SimpleText(showDetail and violation or lowDetailText, "BudgetLabel", toScreen.x, toScreen.y, color_white, 1, 1)
+								end
 							end
 						end
 					end

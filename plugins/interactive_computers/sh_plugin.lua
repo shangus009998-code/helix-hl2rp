@@ -3,6 +3,7 @@ local PLUGIN = PLUGIN
 PLUGIN.name = "Interactive Computers"
 PLUGIN.author = "Frosty"
 PLUGIN.description = "Adds interactive computer terminals with DOS-style journal storage."
+PLUGIN.entities = PLUGIN.entities or {}
 
 PLUGIN.license = [[
 Copyright © 2026 Frosty
@@ -23,7 +24,13 @@ PLUGIN.allowedModels = {
 	["models/props_combine/combine_interface003.mdl"] = true,
 	["models/props_combine/combine_intmonitor001.mdl"] = true,
 	["models/props_combine/combine_intmonitor003.mdl"] = true,
-	["models/props_combine/breenconsole.mdl"] = true
+	["models/props_combine/breenconsole.mdl"] = true,
+
+	-- Addons
+	["models/props_se/hl2_combine_cmb_part_10a.mdl"] = true,
+	["models/props_se/hl2_combine_cmb_part_10b.mdl"] = true,
+	["models/props_se/hl2_combine_cmb_part_10c.mdl"] = true,
+	["models/willardnetworks/props/willard_computer.mdl"] = true,
 }
 PLUGIN.combineModels = {
 	["models/props_combine/combine_interface001.mdl"] = true,
@@ -32,7 +39,12 @@ PLUGIN.combineModels = {
 	["models/props_combine/combine_interface003.mdl"] = true,
 	["models/props_combine/combine_intmonitor001.mdl"] = true,
 	["models/props_combine/combine_intmonitor003.mdl"] = true,
-	["models/props_combine/breenconsole.mdl"] = true
+	["models/props_combine/breenconsole.mdl"] = true,
+
+	-- Addons
+	["models/props_se/hl2_combine_cmb_part_10a.mdl"] = true,
+	["models/props_se/hl2_combine_cmb_part_10b.mdl"] = true,
+	["models/props_se/hl2_combine_cmb_part_10c.mdl"] = true,
 }
 PLUGIN.spawnCategory = "HL2 RP: Computers"
 PLUGIN.assemblyMaxDistance = 140
@@ -81,6 +93,28 @@ PLUGIN.entityDefinitions = {
 		interactive = true
 	},
 	{
+		class = "ix_computer_workstation",
+		name = "Workstation",
+		langKey = "interactiveComputerWorkstation",
+		model = "models/willardnetworks/props/willard_computer.mdl",
+		skins = {off = 0, on = 0, error = 0},
+		family = "general",
+		role = "monitor",
+		interactive = true,
+		standalone = true,
+	},
+	{
+		class = "ix_computer_workstation_white",
+		name = "Workstation",
+		langKey = "interactiveComputerWorkstation",
+		model = "models/willardnetworks/props/willard_computer.mdl",
+		skins = {off = 1, on = 1, error = 1},
+		family = "general",
+		role = "monitor",
+		interactive = true,
+		standalone = true,
+	},
+	{
 		class = "ix_computer_combine_monitor_1",
 		name = "Combine Monitor",
 		langKey = "interactiveComputerCombineMonitor",
@@ -95,6 +129,36 @@ PLUGIN.entityDefinitions = {
 		name = "Combine Monitor 3",
 		langKey = "interactiveComputerCombineMonitor",
 		model = "models/props_combine/combine_intmonitor003.mdl",
+		skins = {off = 1, on = 0, error = 1},
+		family = "combine",
+		role = "support",
+		interactive = false
+	},
+	{
+		class = "ix_computer_combine_monitor_a",
+		name = "Combine Monitor A",
+		langKey = "interactiveComputerCombineMonitor",
+		model = "models/props_se/hl2_combine_cmb_part_10a.mdl",
+		skins = {off = 1, on = 0, error = 1},
+		family = "combine",
+		role = "support",
+		interactive = false
+	},
+	{
+		class = "ix_computer_combine_monitor_b",
+		name = "Combine Monitor B",
+		langKey = "interactiveComputerCombineMonitor",
+		model = "models/props_se/hl2_combine_cmb_part_10b.mdl",
+		skins = {off = 1, on = 0, error = 1},
+		family = "combine",
+		role = "support",
+		interactive = false
+	},
+	{
+		class = "ix_computer_combine_monitor_c",
+		name = "Combine Monitor C",
+		langKey = "interactiveComputerCombineMonitor",
+		model = "models/props_se/hl2_combine_cmb_part_10c.mdl",
 		skins = {off = 1, on = 0, error = 1},
 		family = "combine",
 		role = "support",
@@ -170,6 +234,7 @@ ix.lang.AddTable("english", {
 	interactiveComputerKeyboard = "Computer Keyboard",
 	interactiveComputerLabMonitorA = "Workstation Monitor A",
 	interactiveComputerLabMonitorB = "Workstation Monitor B",
+	interactiveComputerWorkstation = "Workstation",
 	interactiveComputerCombineMonitor = "Combine Monitor",
 	interactiveComputerCombineInterface = "Combine Interface",
 	interactiveComputerCivicInterface = "Public Information Interface",
@@ -205,6 +270,9 @@ ix.lang.AddTable("english", {
 	interactiveComputerSaveData = "COMMIT DATA",
 	interactiveComputerPersonalLog = "PERSONAL LOG",
 	interactiveComputerSavePersonalLog = "SAVE PERSONAL LOG",
+	interactiveComputerPhotoLogs = "PHOTO RECORDS",
+	interactiveComputerLiveFeed = "LIVE FEED",
+	interactiveComputerSearch = "SEARCH...",
 	interactiveComputerBack = "<",
 	interactiveComputerNoRoster = "NO VALID BIOSIGNALS",
 	interactiveComputerSecurityBypassed = "Terminal security has been bypassed temporarily.",
@@ -307,6 +375,7 @@ ix.lang.AddTable("korean", {
 	interactiveComputerKeyboard = "컴퓨터 키보드",
 	interactiveComputerLabMonitorA = "작업용 모니터",
 	interactiveComputerLabMonitorB = "작업용 모니터",
+	interactiveComputerWorkstation = "워크스테이션",
 	interactiveComputerCombineMonitor = "콤바인 모니터",
 	interactiveComputerCombineInterface = "콤바인 인터페이스",
 	interactiveComputerCivicInterface = "공공 정보 인터페이스",
@@ -342,6 +411,9 @@ ix.lang.AddTable("korean", {
 	interactiveComputerSaveData = "데이터 저장",
 	interactiveComputerPersonalLog = "개인 기록",
 	interactiveComputerSavePersonalLog = "개인 기록 저장",
+	interactiveComputerPhotoLogs = "촬영 기록",
+	interactiveComputerLiveFeed = "카메라 접속",
+	interactiveComputerSearch = "검색...",
 	interactiveComputerBack = "<",
 	interactiveComputerNoRoster = "유효한 생체 신호 없음",
 	interactiveComputerSecurityBypassed = "터미널 보안이 잠시 무력화되었습니다.",
@@ -445,10 +517,13 @@ function PLUGIN:IsCombineModel(model)
 end
 
 function PLUGIN:GetComputerDefinition(identifier)
-	identifier = string.lower(identifier or "")
+	identifier = string.lower(string.Replace(identifier or "", "\\", "/"))
 
 	for _, definition in ipairs(self.entityDefinitions) do
-		if (definition.class == identifier or definition.model == identifier) then
+		local class = string.lower(definition.class or "")
+		local model = string.lower(string.Replace(definition.model or "", "\\", "/"))
+
+		if (class == identifier or model == identifier) then
 			return definition
 		end
 	end
@@ -518,8 +593,8 @@ function PLUGIN:FindNearestSupportComputer(entity, requestedRole)
 	local bestCandidate
 	local bestDistance = math.huge
 
-	for _, candidate in ipairs(ents.GetAll()) do
-		if (!self:IsSupportComputer(candidate)) then
+	for _, candidate in pairs(self.entities) do
+		if (!IsValid(candidate) or !self:IsSupportComputer(candidate)) then
 			continue
 		end
 
@@ -579,6 +654,10 @@ function PLUGIN:GetRequiredSupportRoles(entity)
 	end
 
 	if (definition.family == "general") then
+		if (definition.standalone == true) then
+			return {}
+		end
+
 		return {"desktop"}
 	end
 
@@ -596,6 +675,10 @@ function PLUGIN:ResolveStorageEntity(entity)
 	end
 
 	if (definition.family == "general" and definition.interactive == true) then
+		if (definition.standalone == true) then
+			return entity
+		end
+
 		return self:FindNearestSupportComputer(entity, "desktop") or entity
 	end
 
@@ -625,7 +708,7 @@ function PLUGIN:HasCombineTerminalAccess(client)
 		return false
 	end
 
-	if (client:IsCombine()) then
+	if (client:IsCombine() or client:IsAdmin()) then
 		return true
 	end
 
@@ -796,8 +879,8 @@ end
 function PLUGIN:FindComputerByID(computerID)
 	computerID = tonumber(computerID)
 
-	for _, entity in ipairs(ents.GetAll()) do
-		if (self:IsPrimaryComputerEntity(entity) and entity:GetComputerID() == computerID) then
+	for _, entity in pairs(self.entities) do
+		if (IsValid(entity) and self:IsPrimaryComputerEntity(entity) and entity:GetComputerID() == computerID) then
 			return entity
 		end
 	end
@@ -829,6 +912,16 @@ function PLUGIN:RegisterSpawnableEntities()
 	end
 
 	self.computersRegistered = true
+end
+
+function PLUGIN:CanProperty(client, property, entity)
+	local class = IsValid(entity) and entity:GetClass()
+
+	if (class == "ix_interactive_computer") then
+		if (property == "remover" or property == "ignite" or property == "extinguish" or property == "drive" or property == "rb655_dissolve") then
+			return false
+		end
+	end
 end
 
 ix.util.Include("sv_plugin.lua")
